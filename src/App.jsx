@@ -6,9 +6,45 @@ import './App.css'
 const BUSINESS_STORAGE_KEY = 'rostermanager-business'
 const EMPLOYEES_STORAGE_KEY = 'rostermanager-employees'
 const MIN_STAFF_KEY = 'rostermanager-min-staff'
+const MAX_STAFF_KEY = 'rostermanager-max-staff'
 const ROLL_FORWARD_DAYS_KEY = 'rostermanager-roll-forward-days'
 const SELECTED_WEEK_KEY = 'rostermanager-selected-week'
 const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const TIME_OPTIONS = [
+  '06:00',
+  '06:30',
+  '07:00',
+  '07:30',
+  '08:00',
+  '08:30',
+  '09:00',
+  '09:30',
+  '10:00',
+  '10:30',
+  '11:00',
+  '11:30',
+  '12:00',
+  '12:30',
+  '13:00',
+  '13:30',
+  '14:00',
+  '14:30',
+  '15:00',
+  '15:30',
+  '16:00',
+  '16:30',
+  '17:00',
+  '17:30',
+  '18:00',
+  '18:30',
+  '19:00',
+  '19:30',
+  '20:00',
+  '20:30',
+  '21:00',
+  '21:30',
+  '22:00',
+]
 
 function getStartOfWeek(date = new Date()) {
   const nextDate = new Date(date)
@@ -108,6 +144,15 @@ function getSavedMinimumStaff() {
   }
 }
 
+function getSavedMaximumStaff() {
+  try {
+    const savedMaximum = Number(localStorage.getItem(MAX_STAFF_KEY))
+    return Number.isFinite(savedMaximum) && savedMaximum > 0 ? savedMaximum : 4
+  } catch {
+    return 4
+  }
+}
+
 function getSavedRollForwardDays() {
   try {
     const savedDays = Number(localStorage.getItem(ROLL_FORWARD_DAYS_KEY))
@@ -140,9 +185,12 @@ function App() {
     businessName: '',
     email: '',
     name: '',
+    startTime: '09:00',
+    endTime: '17:00',
   })
   const [savedEmployees, setSavedEmployees] = useState(() => getSavedEmployees())
   const [minimumStaff, setMinimumStaff] = useState(() => getSavedMinimumStaff())
+  const [maximumStaff, setMaximumStaff] = useState(() => getSavedMaximumStaff())
   const [rollForwardDays, setRollForwardDays] = useState(() => getSavedRollForwardDays())
   const [selectedWeekKey, setSelectedWeekKey] = useState(() => getSavedSelectedWeek())
   const weekOptions = buildWeekOptions(new Date())
@@ -178,6 +226,10 @@ function App() {
 
       const employeeRecord = {
         name: employeeName,
+        startTime: employee.startTime || '09:00',
+        endTime: employee.endTime || '17:00',
+        maxHoursByWeek: {},
+        shiftTimesByWeek: {},
         daysOff: [],
         createdAt: new Date().toISOString(),
       }
@@ -185,7 +237,7 @@ function App() {
       saveEmployeeRecord(employeeRecord)
       setSavedEmployees(getSavedEmployees())
       setIsModalOpen(false)
-      setEmployee({ businessName: '', email: '', name: '' })
+      setEmployee({ businessName: '', email: '', name: '', startTime: '09:00', endTime: '17:00' })
       return
     }
 
@@ -198,7 +250,7 @@ function App() {
     saveBusinessProfile(businessProfile)
     setIsLoggedIn(true)
     setIsModalOpen(false)
-    setEmployee({ businessName: '', email: '', name: '' })
+    setEmployee({ businessName: '', email: '', name: '', startTime: '09:00', endTime: '17:00' })
   }
 
   const getEmployeeDaysOffForWeek = (person, weekKey = selectedWeekKey) => {
@@ -289,6 +341,14 @@ function App() {
     localStorage.setItem(MIN_STAFF_KEY, String(validValue))
   }
 
+  const handleMaximumStaffChange = (event) => {
+    const nextValue = Number(event.target.value)
+    const validValue = Number.isFinite(nextValue) && nextValue > 0 ? nextValue : 1
+
+    setMaximumStaff(validValue)
+    localStorage.setItem(MAX_STAFF_KEY, String(validValue))
+  }
+
   const handleRollForwardDaysChange = (event) => {
     const nextValue = Number(event.target.value)
     const validValue = Number.isFinite(nextValue) && nextValue >= 0 ? nextValue : 0
@@ -303,7 +363,177 @@ function App() {
     localStorage.removeItem(SELECTED_WEEK_KEY)
     setSavedEmployees([])
     setIsLoggedIn(false)
-    setEmployee({ businessName: '', email: '', name: '' })
+    setEmployee({ businessName: '', email: '', name: '', startTime: '09:00', endTime: '17:00' })
+  }
+
+  const handleDeleteEmployee = (employeeName) => {
+    const confirmed = window.confirm(`Delete ${employeeName}? This cannot be undone.`)
+
+    if (!confirmed) {
+      return
+    }
+
+    const updatedEmployees = getSavedEmployees().filter((person) => person.name !== employeeName)
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
+  }
+
+  const getEmployeeShiftForDay = (person, day, weekKey = selectedWeekKey) => {
+    const weekSchedule = person.shiftTimesByWeek || {}
+    const dayShift = weekSchedule[weekKey]?.[day]
+
+    if (dayShift && typeof dayShift === 'object') {
+      return {
+        startTime: dayShift.startTime || person.startTime || '09:00',
+        endTime: dayShift.endTime || person.endTime || '17:00',
+      }
+    }
+
+    return {
+      startTime: person.startTime || '09:00',
+      endTime: person.endTime || '17:00',
+    }
+  }
+
+  const handleEmployeeShiftChange = (employeeName, day, field, value) => {
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      if (person.name !== employeeName) {
+        return person
+      }
+
+      const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
+
+      currentWeekTimes[day] = {
+        ...(currentWeekTimes[day] || {}),
+        [field]: value,
+      }
+
+      weekSchedule[selectedWeekKey] = currentWeekTimes
+
+      return {
+        ...person,
+        shiftTimesByWeek: weekSchedule,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
+  }
+
+  const copyMondayTimesToWeek = (employeeName) => {
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      if (person.name !== employeeName) {
+        return person
+      }
+
+      const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
+      const mondayShift = currentWeekTimes.Mon || {
+        startTime: person.startTime || '09:00',
+        endTime: person.endTime || '17:00',
+      }
+
+      WEEK_DAYS.forEach((day) => {
+        currentWeekTimes[day] = {
+          ...(currentWeekTimes[day] || {}),
+          startTime: mondayShift.startTime,
+          endTime: mondayShift.endTime,
+        }
+      })
+
+      weekSchedule[selectedWeekKey] = currentWeekTimes
+
+      return {
+        ...person,
+        shiftTimesByWeek: weekSchedule,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
+  }
+
+  const getMinutesFromTime = (timeValue) => {
+    if (!timeValue || typeof timeValue !== 'string') {
+      return 0
+    }
+
+    const [hours, minutes] = timeValue.split(':').map((value) => Number(value))
+
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+      return 0
+    }
+
+    return hours * 60 + minutes
+  }
+
+  const getEmployeeWeekHours = (person, weekKey = selectedWeekKey) => {
+    const weekSchedule = person.shiftTimesByWeek || {}
+    const selectedDaySchedule = weekSchedule[weekKey] || {}
+
+    return WEEK_DAYS.reduce((totalHours, day) => {
+      if (getEmployeeDaysOffForWeek(person, weekKey).includes(day)) {
+        return totalHours
+      }
+
+      const shift = selectedDaySchedule[day] || {}
+      const startMinutes = getMinutesFromTime(shift.startTime || person.startTime || '09:00')
+      const endMinutes = getMinutesFromTime(shift.endTime || person.endTime || '17:00')
+
+      if (endMinutes <= startMinutes) {
+        return totalHours
+      }
+
+      return totalHours + (endMinutes - startMinutes) / 60
+    }, 0)
+  }
+
+  const getEmployeeMaxHoursForWeek = (person, weekKey = selectedWeekKey) => {
+    const maxHoursByWeek = person.maxHoursByWeek || {}
+
+    if (Number.isFinite(Number(maxHoursByWeek[weekKey]))) {
+      return Number(maxHoursByWeek[weekKey])
+    }
+
+    if (Number.isFinite(Number(person.maxHours))) {
+      return Number(person.maxHours)
+    }
+
+    return 0
+  }
+
+  const getEmployeeHoursStatus = (person, weekKey = selectedWeekKey) => {
+    const maxHours = getEmployeeMaxHoursForWeek(person, weekKey)
+
+    if (!maxHours) {
+      return 'neutral'
+    }
+
+    return getEmployeeWeekHours(person, weekKey) > maxHours ? 'over' : 'within'
+  }
+
+  const handleEmployeeMaxHoursChange = (employeeName, value) => {
+    const rawValue = Number(value)
+    const normalizedValue = Number.isFinite(rawValue) && rawValue >= 0 ? rawValue : 0
+
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      if (person.name !== employeeName) {
+        return person
+      }
+
+      const maxHoursByWeek = { ...(person.maxHoursByWeek || {}) }
+      maxHoursByWeek[selectedWeekKey] = normalizedValue
+
+      return {
+        ...person,
+        maxHoursByWeek,
+        maxHours: normalizedValue,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
   }
 
   const handleWeekChange = (event) => {
@@ -357,6 +587,15 @@ function App() {
                   onChange={handleMinimumStaffChange}
                 />
               </label>
+              <label className="maximum-staff-control">
+                <span>Maximum staff</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={maximumStaff}
+                  onChange={handleMaximumStaffChange}
+                />
+              </label>
               <label className="week-control">
                 <span>Week</span>
                 <select value={selectedWeekKey} onChange={handleWeekChange}>
@@ -383,16 +622,20 @@ function App() {
           <div className="roster-grid">
             {WEEK_DAYS.map((day) => {
               const availableEmployees = getAvailableEmployeesForDay(day)
-              const isUnderMinimum = availableEmployees.length < minimumStaff
+              const staffingCount = availableEmployees.length
+              const isUnderMinimum = staffingCount < minimumStaff
+              const isOverMaximum = staffingCount > maximumStaff
+              const dayStatusClass = isOverMaximum
+                ? 'roster-overstaffed'
+                : isUnderMinimum
+                  ? 'roster-understaffed'
+                  : 'roster-okay'
 
               return (
-                <div
-                  key={day}
-                  className={`roster-day-card ${isUnderMinimum ? 'roster-shortage' : ''}`}
-                >
+                <div key={day} className={`roster-day-card ${dayStatusClass}`}>
                   <h3>{day}</h3>
                   <p className="roster-available-count">
-                    {availableEmployees.length} / {minimumStaff} available
+                    {staffingCount} / {minimumStaff} min • {maximumStaff} max
                   </p>
                   {availableEmployees.length > 0 ? (
                     <ul>
@@ -403,10 +646,16 @@ function App() {
                   ) : (
                     <p className="roster-empty">Closed</p>
                   )}
-                  {isUnderMinimum && (
+                  {isOverMaximum && (
+                    <p className="roster-warning">Over staffed by {staffingCount - maximumStaff}</p>
+                  )}
+                  {!isOverMaximum && isUnderMinimum && (
                     <p className="roster-warning">
-                      Need {minimumStaff - availableEmployees.length} more
+                      Need {minimumStaff - staffingCount} more
                     </p>
+                  )}
+                  {!isOverMaximum && !isUnderMinimum && staffingCount > 0 && (
+                    <p className="roster-warning roster-ok-message">Staffing okay</p>
                   )}
                 </div>
               )
@@ -436,21 +685,101 @@ function App() {
                 {savedEmployees.map((person, index) => (
                   <tr key={`${person.name}-${index}`} className="employee-row">
                     <td className="employee-name-cell">
-                      <strong>{person.name}</strong>
+                      <div className="employee-name-group">
+                        <div className="employee-name-row">
+                          <strong>{person.name}</strong>
+                          
+                        </div>
+                        <div><button
+                            type="button"
+                            className="delete-employee-button"
+                            onClick={() => handleDeleteEmployee(person.name)}
+                            aria-label={`Delete ${person.name}`}
+                          >
+                            Delete
+                          </button></div>
+                        <span
+                          className={`employee-total-hours ${getEmployeeHoursStatus(
+                            person,
+                            selectedWeekKey,
+                          )}`}
+                        >
+                          Total: {getEmployeeWeekHours(person, selectedWeekKey).toFixed(1)}h
+                        </span>
+                        <label className="employee-max-hours-control">
+                          <span>Max hours</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            value={getEmployeeMaxHoursForWeek(person, selectedWeekKey)}
+                            onChange={(event) =>
+                              handleEmployeeMaxHoursChange(person.name, event.target.value)
+                            }
+                          />
+                        </label>
+                      </div>
                     </td>
                     {WEEK_DAYS.map((day) => {
+                      const shift = getEmployeeShiftForDay(person, day, selectedWeekKey)
                       const isOff = getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(day)
 
                       return (
                         <td key={`${person.name}-${day}`} className="day-cell">
-                          <button
-                            type="button"
-                            className={`day-toggle ${isOff ? 'off' : ''}`}
-                            onClick={() => toggleDayOff(person.name, day)}
-                            aria-label={`${person.name} off on ${day}`}
-                          >
-                            {isOff ? '×' : '•'}
-                          </button>
+                          <div className="day-shift-controls">
+                            <label>
+                              <span>Start</span>
+                              <select
+                                value={shift.startTime}
+                                onChange={(event) =>
+                                  handleEmployeeShiftChange(person.name, day, 'startTime', event.target.value)
+                                }
+                                aria-label={`${person.name} start time for ${day}`}
+                              >
+                                {TIME_OPTIONS.map((time) => (
+                                  <option key={`${person.name}-${day}-start-${time}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label>
+                              <span>End</span>
+                              <select
+                                value={shift.endTime}
+                                onChange={(event) =>
+                                  handleEmployeeShiftChange(person.name, day, 'endTime', event.target.value)
+                                }
+                                aria-label={`${person.name} end time for ${day}`}
+                              >
+                                {TIME_OPTIONS.map((time) => (
+                                  <option key={`${person.name}-${day}-end-${time}`} value={time}>
+                                    {time}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                          <div className="day-actions">
+                            {day === 'Mon' && (
+                              <button
+                                type="button"
+                                className="copy-monday-times-button"
+                                onClick={() => copyMondayTimesToWeek(person.name)}
+                                aria-label={`Set all times for ${person.name}`}
+                              >
+                                Set all
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className={`day-toggle ${isOff ? 'off' : ''}`}
+                              onClick={() => toggleDayOff(person.name, day)}
+                              aria-label={`${person.name} off on ${day}`}
+                            >
+                              {isOff ? '×' : '•'}
+                            </button>
+                          </div>
                         </td>
                       )
                     })}
@@ -488,6 +817,27 @@ function App() {
                     required
                   />
                 </label>
+
+                <div className="time-form-row">
+                  <label>
+                    Start time
+                    <input
+                      type="time"
+                      name="startTime"
+                      value={employee.startTime}
+                      onChange={handleChange}
+                    />
+                  </label>
+                  <label>
+                    End time
+                    <input
+                      type="time"
+                      name="endTime"
+                      value={employee.endTime}
+                      onChange={handleChange}
+                    />
+                  </label>
+                </div>
 
                 <div className="modal-actions">
                   <button type="button" className="secondary" onClick={() => setIsModalOpen(false)}>

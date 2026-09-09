@@ -120,10 +120,11 @@
 }
 
 .dashboard-page {
-  max-width: 960px;
+  max-width: min(100%, 960px);
   margin: 0 auto;
-  padding: 48px 24px 64px;
+  padding: 48px 12px 64px;
   color: #111827;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
@@ -238,6 +239,9 @@
 .roster-day-card h3 {
   margin: 0 0 10px;
   font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .roster-day-card ul {
@@ -249,10 +253,19 @@
   color: #1f2937;
 }
 
+.roster-day-card li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .roster-available-count {
   margin: 0 0 8px;
   color: #4b5563;
   font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .roster-empty {
@@ -261,9 +274,19 @@
   font-size: 14px;
 }
 
-.roster-shortage {
+.roster-understaffed {
   border-color: #f59e0b;
   background: #fff7ed;
+}
+
+.roster-okay {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.roster-overstaffed {
+  border-color: #ef4444;
+  background: #fef2f2;
 }
 
 .roster-warning {
@@ -271,6 +294,18 @@
   color: #b45309;
   font-size: 12px;
   font-weight: 700;
+}
+
+.roster-understaffed .roster-warning {
+  color: #b45309;
+}
+
+.roster-overstaffed .roster-warning {
+  color: #b91c1c;
+}
+
+.roster-okay .roster-warning {
+  color: #15803d;
 }
 
 .panel-header {
@@ -291,6 +326,7 @@
 
 .employee-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
@@ -300,7 +336,7 @@
 .employee-table th,
 .employee-table td {
   border: 1px solid #e5e7eb;
-  padding: 10px 8px;
+  padding: 8px 6px;
   text-align: center;
 }
 
@@ -311,8 +347,96 @@
 }
 
 .employee-name-cell {
-  text-align: left !important;
+  width: 180px;
   min-width: 180px;
+  max-width: 180px;
+  text-align: left !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.employee-name-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+.employee-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
+.employee-name-row strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.delete-employee-button {
+  padding: 5px 8px;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.employee-total-hours {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #14532d;
+  font-weight: 700;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+}
+
+.employee-total-hours.over {
+  color: #7f1d1d;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+.employee-total-hours.within {
+  color: #14532d;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.employee-max-hours-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 30px;
+  margin-top: 6px;
+  color: #374151;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.employee-max-hours-control input {
+  width: 100%;
+  max-width: 100px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #111827;
+  background: #f9fafb;
 }
 
 .employee-row td {
@@ -320,11 +444,63 @@
 }
 
 .day-header {
-  width: 62px;
+  width: calc((100% - 180px) / 7);
+  min-width: 72px;
 }
 
 .day-cell {
-  width: 62px;
+  min-width: 72px;
+  vertical-align: top;
+}
+
+.day-shift-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.day-shift-controls label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.day-shift-controls select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #f9fafb;
+  color: #000000;
+}
+
+.time-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.day-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.copy-monday-times-button {
+  padding: 4px 6px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .day-toggle {
@@ -359,6 +535,16 @@
 
   .dashboard-summary {
     grid-template-columns: 1fr;
+  }
+
+  .employee-name-cell {
+    width: 140px;
+    min-width: 140px;
+  }
+
+  .day-header,
+  .day-cell {
+    min-width: 64px;
   }
 }
 
