@@ -38,8 +38,9 @@ export default function EmployeeDayCell({
           <input
             type="number"
             min="0"
+            max="12"
             step="0.5"
-            value={Number.isFinite(hoursValue) ? Number(hoursValue.toFixed(2)) : 0}
+            value={Number.isFinite(hoursValue) ? Number(Math.min(hoursValue, 12).toFixed(2)) : 0}
             onChange={(event) => onHoursChange(person.name, day, event.target.value)}
             aria-label={`${person.name} hours for ${day}`}
           />

@@ -195,6 +195,7 @@ function App() {
   const [maximumStaff, setMaximumStaff] = useState(() => getSavedMaximumStaff())
   const [rollForwardDays, setRollForwardDays] = useState(() => getSavedRollForwardDays())
   const [selectedWeekKey, setSelectedWeekKey] = useState(() => getSavedSelectedWeek())
+  const [activeView, setActiveView] = useState('dashboard')
   const weekOptions = buildWeekOptions(new Date())
 
   useEffect(() => {
@@ -433,7 +434,7 @@ function App() {
 
   const handleEmployeeHoursChange = (employeeName, day, hoursValue) => {
     const rawHours = Number(hoursValue)
-    const normalizedHours = Number.isFinite(rawHours) && rawHours >= 0 ? rawHours : 0
+    const normalizedHours = Number.isFinite(rawHours) && rawHours >= 0 ? Math.min(rawHours, 12) : 0
 
     const updatedEmployees = getSavedEmployees().map((person) => {
       if (person.name !== employeeName) {
@@ -537,7 +538,8 @@ function App() {
       return startTime || '09:00'
     }
 
-    const roundedMinutes = Math.round((getMinutesFromTime(startTime) + rawHours * 60) / 30) * 30
+    const cappedHours = Math.min(rawHours, 12)
+    const roundedMinutes = Math.round((getMinutesFromTime(startTime) + cappedHours * 60) / 30) * 30
     return getTimeFromMinutes(roundedMinutes)
   }
 
@@ -615,6 +617,114 @@ function App() {
     localStorage.setItem(SELECTED_WEEK_KEY, nextWeekKey)
   }
 
+  const getWeekRangeLabel = (weekKey = selectedWeekKey) => {
+    const weekStart = new Date(`${weekKey}T00:00:00`)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+
+    const startLabel = weekStart.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+    const endLabel = weekEnd.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+
+    return `${startLabel} - ${endLabel}`
+  }
+
+  const getDateLabelForDay = (day, weekKey = selectedWeekKey) => {
+    const weekStart = new Date(`${weekKey}T00:00:00`)
+    const dayIndex = WEEK_DAYS.indexOf(day)
+    const dayDate = new Date(weekStart)
+    dayDate.setDate(weekStart.getDate() + dayIndex)
+
+    return dayDate.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  if (activeView === 'print') {
+    const businessName = getSavedBusiness()?.businessName || 'Your business'
+
+    return (
+      <main className="print-page">
+        <header className="print-header">
+          <div>
+            <p className="eyebrow">Printable roster</p>
+            <h1>{businessName}</h1>
+            <p className="print-week-range">{getWeekRangeLabel()}</p>
+          </div>
+
+          <div className="print-actions">
+            <button type="button" className="secondary" onClick={() => setActiveView('dashboard')}>
+              Back to dashboard
+            </button>
+            <button type="button" className="primary" onClick={() => window.print()}>
+              Print roster
+            </button>
+          </div>
+        </header>
+
+        <div className="print-roster-wrapper">
+          <table className="print-roster-table">
+            <thead>
+              <tr>
+                <th>Employee</th>
+                {WEEK_DAYS.map((day) => (
+                  <th key={day}>
+                    <div>{day}</div>
+                    <small>{getDateLabelForDay(day)}</small>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {savedEmployees.map((person) => (
+                <tr key={person.name}>
+                  <td className="print-employee-name-cell">
+                    <strong>{person.name}</strong>
+                    <span>
+                      Total: {getEmployeeWeekHours(person, selectedWeekKey).toFixed(1)}h
+                    </span>
+                  </td>
+                  {WEEK_DAYS.map((day) => {
+                    const isOff = getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(day)
+                    const shift = getEmployeeShiftForDay(person, day, selectedWeekKey)
+
+                    if (isOff) {
+                      return (
+                        <td key={`${person.name}-${day}`} className="print-off-cell">
+                          Off
+                        </td>
+                      )
+                    }
+
+                    const hours = getShiftHours(shift.startTime, shift.endTime)
+
+                    return (
+                      <td key={`${person.name}-${day}`} className="print-shift-cell">
+                        <div className="print-shift-content">
+                          <strong>{shift.startTime}</strong>
+                          <span>to {shift.endTime}</span>
+                          <span>{hours.toFixed(1)}h</span>
+                        </div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    )
+  }
+
   if (isLoggedIn) {
     const businessName = getSavedBusiness()?.businessName || 'Your business'
     const getAvailableEmployeesForDay = (day) =>
@@ -627,9 +737,14 @@ function App() {
             <p className="eyebrow">Dashboard</p>
             <h1>{businessName}</h1>
           </div>
-          <button type="button" className="secondary" onClick={handleResetEmployeeData}>
-            Reset employee data
-          </button>
+          <div className="dashboard-actions">
+            <button type="button" className="primary" onClick={() => setActiveView('print')}>
+              Printable roster
+            </button>
+            <button type="button" className="secondary" onClick={handleResetEmployeeData}>
+              Reset employee data
+            </button>
+          </div>
         </header>
 
         <section className="dashboard-summary">

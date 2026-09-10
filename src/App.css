@@ -135,6 +135,13 @@
   margin-bottom: 24px;
 }
 
+.dashboard-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   text-transform: uppercase;
@@ -325,7 +332,8 @@
 }
 
 .employee-table {
-  width: 100%;
+  width: max-content;
+  min-width: 980px;
   table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid #e5e7eb;
@@ -338,6 +346,11 @@
   border: 1px solid #e5e7eb;
   padding: 8px 6px;
   text-align: center;
+  box-sizing: border-box;
+}
+
+.employee-table thead th {
+  vertical-align: middle;
 }
 
 .employee-table th {
@@ -443,14 +456,24 @@
   background: #ffffff;
 }
 
+.employee-name-cell {
+  width: 180px;
+  min-width: 180px;
+  max-width: 180px;
+}
+
 .day-header {
-  width: calc((100% - 180px) / 7);
-  min-width: 72px;
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
 }
 
 .day-cell {
-  min-width: 72px;
+  width: 110px;
+  min-width: 110px;
+  max-width: 110px;
   vertical-align: top;
+  padding: 10px 8px;
 }
 
 .day-shift-controls {
@@ -458,19 +481,24 @@
   flex-direction: column;
   gap: 8px;
   margin-bottom: 10px;
+  width: 100%;
 }
 
 .day-shift-controls label {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 4px;
   font-size: 11px;
   color: #6b7280;
+  width: 100%;
+  text-align: left;
 }
 
-.day-shift-controls select {
+.day-shift-controls select,
+.day-shift-controls input {
   width: 100%;
+  box-sizing: border-box;
   padding: 6px 8px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
@@ -490,6 +518,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  width: 100%;
 }
 
 .copy-monday-times-button {
@@ -525,16 +554,132 @@
   color: white;
 }
 
+.print-page {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+  color: #111827;
+}
+
+.print-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.print-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 2.6rem);
+}
+
+.print-week-range {
+  margin: 8px 0 0;
+  color: #4b5563;
+  font-size: 1rem;
+}
+
+.print-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.print-roster-wrapper {
+  overflow-x: auto;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(17, 24, 39, 0.05);
+}
+
+.print-roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 960px;
+  table-layout: fixed;
+}
+
+.print-roster-table th,
+.print-roster-table td {
+  border: 1px solid #d1d5db;
+  padding: 10px 8px;
+  text-align: center;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.print-roster-table th {
+  background: #f9fafb;
+  font-size: 12px;
+  color: #374151;
+}
+
+.print-roster-table th small {
+  display: block;
+  margin-top: 4px;
+  color: #6b7280;
+}
+
+.print-employee-name-cell {
+  width: 180px;
+  min-width: 180px;
+  text-align: left !important;
+  background: #f3f4f6;
+}
+
+.print-employee-name-cell strong,
+.print-employee-name-cell span {
+  display: block;
+}
+
+.print-employee-name-cell span {
+  margin-top: 6px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.print-off-cell {
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.print-shift-cell {
+  background: #ffffff;
+  min-width: 90px;
+  width: 90px;
+}
+
+.print-shift-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.print-shift-content strong,
+.print-shift-content span {
+  display: block;
+}
+
 @media (max-width: 640px) {
   .dashboard-header,
   .panel-header,
-  .employee-card {
+  .employee-card,
+  .print-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
   .dashboard-summary {
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-actions,
+  .print-actions {
+    width: 100%;
   }
 
   .employee-name-cell {
