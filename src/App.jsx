@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import reactLogo from './assets/react.svg'
 import viteLogo from './assets/vite.svg'
 import './App.css'
+import RosterDayCard from './components/RosterDayCard'
+import EmployeeTableRow from './components/EmployeeTableRow'
 
 const BUSINESS_STORAGE_KEY = 'rostermanager-business'
 const EMPLOYEES_STORAGE_KEY = 'rostermanager-employees'
@@ -279,29 +281,37 @@ function App() {
   }
 
   const hydrateWeekFromPrevious = (employees, weekKey = selectedWeekKey) => {
+    const generatedWeekKeys = []
+    const cursorDate = new Date(`${weekKey}T00:00:00`)
+
+    for (let index = 0; index < 53; index += 1) {
+      generatedWeekKeys.push(formatWeekKey(cursorDate))
+      cursorDate.setDate(cursorDate.getDate() - 7)
+    }
+
+    generatedWeekKeys.reverse()
+
     const updatedEmployees = employees.map((person) => {
       const weekSchedule = { ...(person.daysOffByWeek || {}) }
 
-      if (weekSchedule[weekKey]) {
-        return person
+      for (const currentWeekKey of generatedWeekKeys) {
+        if (Array.isArray(weekSchedule[currentWeekKey])) {
+          continue
+        }
+
+        const previousWeekKey = getPreviousWeekKey(currentWeekKey)
+        const previousWeekDaysOff = Array.isArray(weekSchedule[previousWeekKey])
+          ? weekSchedule[previousWeekKey]
+          : []
+
+        const generatedDaysOff = previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
+        weekSchedule[currentWeekKey] = generatedDaysOff
       }
-
-      const previousWeekKey = getPreviousWeekKey(weekKey)
-      const previousWeekDaysOff = Array.isArray(weekSchedule[previousWeekKey])
-        ? weekSchedule[previousWeekKey]
-        : []
-
-      if (!previousWeekDaysOff.length) {
-        return person
-      }
-
-      const generatedDaysOff = previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
-      weekSchedule[weekKey] = generatedDaysOff
 
       return {
         ...person,
         daysOffByWeek: weekSchedule,
-        daysOff: generatedDaysOff,
+        daysOff: Array.isArray(weekSchedule[weekKey]) ? weekSchedule[weekKey] : [],
       }
     })
 
@@ -421,6 +431,39 @@ function App() {
     setSavedEmployees(updatedEmployees)
   }
 
+  const handleEmployeeHoursChange = (employeeName, day, hoursValue) => {
+    const rawHours = Number(hoursValue)
+    const normalizedHours = Number.isFinite(rawHours) && rawHours >= 0 ? rawHours : 0
+
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      if (person.name !== employeeName) {
+        return person
+      }
+
+      const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
+      const currentShift = currentWeekTimes[day] || {}
+      const startTime = currentShift.startTime || person.startTime || '09:00'
+      const endTime = getEndTimeFromHours(startTime, normalizedHours)
+
+      currentWeekTimes[day] = {
+        ...currentShift,
+        startTime,
+        endTime,
+      }
+
+      weekSchedule[selectedWeekKey] = currentWeekTimes
+
+      return {
+        ...person,
+        shiftTimesByWeek: weekSchedule,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
+  }
+
   const copyMondayTimesToWeek = (employeeName) => {
     const updatedEmployees = getSavedEmployees().map((person) => {
       if (person.name !== employeeName) {
@@ -468,6 +511,36 @@ function App() {
     return hours * 60 + minutes
   }
 
+  const getShiftHours = (startTime, endTime) => {
+    const startMinutes = getMinutesFromTime(startTime)
+    const endMinutes = getMinutesFromTime(endTime)
+
+    if (endMinutes <= startMinutes) {
+      return 0
+    }
+
+    return (endMinutes - startMinutes) / 60
+  }
+
+  const getTimeFromMinutes = (totalMinutes) => {
+    const normalizedMinutes = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60)
+    const hours = Math.floor(normalizedMinutes / 60)
+    const minutes = normalizedMinutes % 60
+
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`
+  }
+
+  const getEndTimeFromHours = (startTime, hoursValue) => {
+    const rawHours = Number(hoursValue)
+
+    if (!Number.isFinite(rawHours) || rawHours < 0) {
+      return startTime || '09:00'
+    }
+
+    const roundedMinutes = Math.round((getMinutesFromTime(startTime) + rawHours * 60) / 30) * 30
+    return getTimeFromMinutes(roundedMinutes)
+  }
+
   const getEmployeeWeekHours = (person, weekKey = selectedWeekKey) => {
     const weekSchedule = person.shiftTimesByWeek || {}
     const selectedDaySchedule = weekSchedule[weekKey] || {}
@@ -478,14 +551,10 @@ function App() {
       }
 
       const shift = selectedDaySchedule[day] || {}
-      const startMinutes = getMinutesFromTime(shift.startTime || person.startTime || '09:00')
-      const endMinutes = getMinutesFromTime(shift.endTime || person.endTime || '17:00')
+      const startTime = shift.startTime || person.startTime || '09:00'
+      const endTime = shift.endTime || person.endTime || '17:00'
 
-      if (endMinutes <= startMinutes) {
-        return totalHours
-      }
-
-      return totalHours + (endMinutes - startMinutes) / 60
+      return totalHours + getShiftHours(startTime, endTime)
     }, 0)
   }
 
@@ -622,42 +691,15 @@ function App() {
           <div className="roster-grid">
             {WEEK_DAYS.map((day) => {
               const availableEmployees = getAvailableEmployeesForDay(day)
-              const staffingCount = availableEmployees.length
-              const isUnderMinimum = staffingCount < minimumStaff
-              const isOverMaximum = staffingCount > maximumStaff
-              const dayStatusClass = isOverMaximum
-                ? 'roster-overstaffed'
-                : isUnderMinimum
-                  ? 'roster-understaffed'
-                  : 'roster-okay'
 
               return (
-                <div key={day} className={`roster-day-card ${dayStatusClass}`}>
-                  <h3>{day}</h3>
-                  <p className="roster-available-count">
-                    {staffingCount} / {minimumStaff} min • {maximumStaff} max
-                  </p>
-                  {availableEmployees.length > 0 ? (
-                    <ul>
-                      {availableEmployees.map((person, index) => (
-                        <li key={`${day}-${person.name}-${index}`}>{person.name}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="roster-empty">Closed</p>
-                  )}
-                  {isOverMaximum && (
-                    <p className="roster-warning">Over staffed by {staffingCount - maximumStaff}</p>
-                  )}
-                  {!isOverMaximum && isUnderMinimum && (
-                    <p className="roster-warning">
-                      Need {minimumStaff - staffingCount} more
-                    </p>
-                  )}
-                  {!isOverMaximum && !isUnderMinimum && staffingCount > 0 && (
-                    <p className="roster-warning roster-ok-message">Staffing okay</p>
-                  )}
-                </div>
+                <RosterDayCard
+                  key={day}
+                  day={day}
+                  availableEmployees={availableEmployees}
+                  minimumStaff={minimumStaff}
+                  maximumStaff={maximumStaff}
+                />
               )
             })}
           </div>
@@ -683,107 +725,22 @@ function App() {
               </thead>
               <tbody>
                 {savedEmployees.map((person, index) => (
-                  <tr key={`${person.name}-${index}`} className="employee-row">
-                    <td className="employee-name-cell">
-                      <div className="employee-name-group">
-                        <div className="employee-name-row">
-                          <strong>{person.name}</strong>
-                          
-                        </div>
-                        <div><button
-                            type="button"
-                            className="delete-employee-button"
-                            onClick={() => handleDeleteEmployee(person.name)}
-                            aria-label={`Delete ${person.name}`}
-                          >
-                            Delete
-                          </button></div>
-                        <span
-                          className={`employee-total-hours ${getEmployeeHoursStatus(
-                            person,
-                            selectedWeekKey,
-                          )}`}
-                        >
-                          Total: {getEmployeeWeekHours(person, selectedWeekKey).toFixed(1)}h
-                        </span>
-                        <label className="employee-max-hours-control">
-                          <span>Max hours</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={getEmployeeMaxHoursForWeek(person, selectedWeekKey)}
-                            onChange={(event) =>
-                              handleEmployeeMaxHoursChange(person.name, event.target.value)
-                            }
-                          />
-                        </label>
-                      </div>
-                    </td>
-                    {WEEK_DAYS.map((day) => {
-                      const shift = getEmployeeShiftForDay(person, day, selectedWeekKey)
-                      const isOff = getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(day)
-
-                      return (
-                        <td key={`${person.name}-${day}`} className="day-cell">
-                          <div className="day-shift-controls">
-                            <label>
-                              <span>Start</span>
-                              <select
-                                value={shift.startTime}
-                                onChange={(event) =>
-                                  handleEmployeeShiftChange(person.name, day, 'startTime', event.target.value)
-                                }
-                                aria-label={`${person.name} start time for ${day}`}
-                              >
-                                {TIME_OPTIONS.map((time) => (
-                                  <option key={`${person.name}-${day}-start-${time}`} value={time}>
-                                    {time}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label>
-                              <span>End</span>
-                              <select
-                                value={shift.endTime}
-                                onChange={(event) =>
-                                  handleEmployeeShiftChange(person.name, day, 'endTime', event.target.value)
-                                }
-                                aria-label={`${person.name} end time for ${day}`}
-                              >
-                                {TIME_OPTIONS.map((time) => (
-                                  <option key={`${person.name}-${day}-end-${time}`} value={time}>
-                                    {time}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          </div>
-                          <div className="day-actions">
-                            {day === 'Mon' && (
-                              <button
-                                type="button"
-                                className="copy-monday-times-button"
-                                onClick={() => copyMondayTimesToWeek(person.name)}
-                                aria-label={`Set all times for ${person.name}`}
-                              >
-                                Set all
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className={`day-toggle ${isOff ? 'off' : ''}`}
-                              onClick={() => toggleDayOff(person.name, day)}
-                              aria-label={`${person.name} off on ${day}`}
-                            >
-                              {isOff ? '×' : '•'}
-                            </button>
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
+                  <EmployeeTableRow
+                    key={`${person.name}-${index}`}
+                    person={person}
+                    selectedWeekKey={selectedWeekKey}
+                    getEmployeeDaysOffForWeek={getEmployeeDaysOffForWeek}
+                    getEmployeeShiftForDay={getEmployeeShiftForDay}
+                    handleEmployeeShiftChange={handleEmployeeShiftChange}
+                    handleEmployeeHoursChange={handleEmployeeHoursChange}
+                    copyMondayTimesToWeek={copyMondayTimesToWeek}
+                    toggleDayOff={toggleDayOff}
+                    getEmployeeWeekHours={getEmployeeWeekHours}
+                    getEmployeeHoursStatus={getEmployeeHoursStatus}
+                    handleEmployeeMaxHoursChange={handleEmployeeMaxHoursChange}
+                    handleDeleteEmployee={handleDeleteEmployee}
+                    getShiftHours={getShiftHours}
+                  />
                 ))}
               </tbody>
             </table>
