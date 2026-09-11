@@ -649,7 +649,32 @@ function App() {
   }
 
   if (activeView === 'print') {
-    const businessName = getSavedBusiness()?.businessName || 'Your business'
+    const businessProfile = getSavedBusiness()
+    const businessName = businessProfile?.businessName || 'Your business'
+    const businessEmail = businessProfile?.email || ''
+
+    const printMailToLink = (() => {
+      const subject = `Roster for ${businessName} - ${getWeekRangeLabel()}`
+      const rosterLines = savedEmployees.map((person) => {
+        const daySummaries = WEEK_DAYS.map((day) => {
+          const isOff = getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(day)
+
+          if (isOff) {
+            return `${day}: Off`
+          }
+
+          const shift = getEmployeeShiftForDay(person, day, selectedWeekKey)
+          const hours = getShiftHours(shift.startTime, shift.endTime)
+          return `${day}: ${shift.startTime} - ${shift.endTime} (${hours.toFixed(1)}h)`
+        }).join('\n')
+
+        return `${person.name}\n${daySummaries}`
+      }).join('\n\n')
+
+      const body = `Hi,\n\nPlease find the roster for ${businessName} for ${getWeekRangeLabel()}.\n\n${rosterLines}\n`
+
+      return `mailto:${businessEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    })()
 
     return (
       <main className="print-page">
@@ -666,6 +691,9 @@ function App() {
             </button>
             <button type="button" className="primary" onClick={() => window.print()}>
               Print roster
+            </button>
+            <button type="button" className="primary" onClick={() => window.location.href = printMailToLink}>
+              Mail to
             </button>
           </div>
         </header>
