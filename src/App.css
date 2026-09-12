@@ -206,6 +206,7 @@
 }
 
 .minimum-staff-control,
+.maximum-staff-control,
 .week-control,
 .roll-forward-control {
   display: flex;
@@ -226,14 +227,26 @@
   font-size: 16px;
 }
 
+.maximum-staff-control input {
+  width: 90px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 16px;
+}
+
 .week-control select {
   width: 180px;
 }
 
 .roster-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 1fr);
   gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
 }
 
 .roster-day-card {
@@ -325,15 +338,17 @@
 
 .panel-header h2 {
   margin: 0;
+  color: #374151;
 }
 
 .employee-table-wrapper {
+  
   overflow-x: auto;
 }
 
 .employee-table {
-  width: 1000px;
-  min-width: 1000px;
+  width: 880px;
+  min-width: 880px;
   table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid #e5e7eb;

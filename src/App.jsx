@@ -894,7 +894,7 @@ function App() {
           <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
             <div className="modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
-                <h2 style={{ color: '#111827' }}>Add employee</h2>
+                <h2>Add employee</h2>
                 <button
                   type="button"
                   className="close-button"
