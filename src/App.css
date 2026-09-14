@@ -217,22 +217,20 @@
   color: #374151;
 }
 
-.minimum-staff-control input,
-.week-control select,
-.roll-forward-control input {
+.minimum-staff-control select,
+.maximum-staff-control select,
+.roll-forward-control select,
+.week-control select {
   width: 90px;
   padding: 8px 10px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   font-size: 16px;
-}
-
-.maximum-staff-control input {
-  width: 90px;
-  padding: 8px 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 16px;
+  background: #fff;
+  color: #111827;
+  appearance: menulist;
+  -webkit-appearance: menulist;
+  -moz-appearance: menulist;
 }
 
 .week-control select {

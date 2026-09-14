@@ -197,6 +197,8 @@ function App() {
   const [selectedWeekKey, setSelectedWeekKey] = useState(() => getSavedSelectedWeek())
   const [activeView, setActiveView] = useState('dashboard')
   const weekOptions = buildWeekOptions(new Date())
+  const staffOptions = Array.from({ length: 20 }, (_, index) => index + 1)
+  const rollForwardOptions = Array.from({ length: 7 }, (_, index) => index)
 
   useEffect(() => {
     setIsLoggedIn(hasSavedData())
@@ -792,21 +794,23 @@ function App() {
             <div className="roster-settings-group">
               <label className="minimum-staff-control">
                 <span>Minimum staff</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={minimumStaff}
-                  onChange={handleMinimumStaffChange}
-                />
+                <select value={minimumStaff} onChange={handleMinimumStaffChange}>
+                  {staffOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="maximum-staff-control">
                 <span>Maximum staff</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={maximumStaff}
-                  onChange={handleMaximumStaffChange}
-                />
+                <select value={maximumStaff} onChange={handleMaximumStaffChange}>
+                  {staffOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="week-control">
                 <span>Week</span>
@@ -820,13 +824,13 @@ function App() {
               </label>
               <label className="roll-forward-control">
                 <span>Roll forward</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="6"
-                  value={rollForwardDays}
-                  onChange={handleRollForwardDaysChange}
-                />
+                <select value={rollForwardDays} onChange={handleRollForwardDaysChange}>
+                  {rollForwardOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
           </div>
