@@ -4,6 +4,13 @@ import viteLogo from './assets/vite.svg'
 import './App.css'
 import RosterDayCard from './components/RosterDayCard'
 import EmployeeTableRow from './components/EmployeeTableRow'
+import {
+  getMinutesFromTime,
+  getShiftBarStyle,
+  getShiftHours,
+  shiftDayForward,
+  WEEK_DAYS,
+} from './shiftUtils'
 
 const BUSINESS_STORAGE_KEY = 'rostermanager-business'
 const EMPLOYEES_STORAGE_KEY = 'rostermanager-employees'
@@ -11,7 +18,6 @@ const MIN_STAFF_KEY = 'rostermanager-min-staff'
 const MAX_STAFF_KEY = 'rostermanager-max-staff'
 const ROLL_FORWARD_DAYS_KEY = 'rostermanager-roll-forward-days'
 const SELECTED_WEEK_KEY = 'rostermanager-selected-week'
-const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const TIME_OPTIONS = [
   '06:00',
   '06:30',
@@ -70,16 +76,6 @@ function getPreviousWeekKey(weekKey) {
   return formatWeekKey(date)
 }
 
-function getDayIndex(day) {
-  return WEEK_DAYS.indexOf(day)
-}
-
-function shiftDayForward(day, daysToRoll = 1) {
-  const currentIndex = getDayIndex(day)
-  const nextIndex = (currentIndex + daysToRoll) % WEEK_DAYS.length
-  return WEEK_DAYS[nextIndex]
-}
-
 function buildWeekOptions(anchorDate = new Date()) {
   const startOfCurrentWeek = getStartOfWeek(anchorDate)
   const options = []
@@ -107,6 +103,21 @@ function buildWeekOptions(anchorDate = new Date()) {
   }
 
   return options
+}
+
+function getWeekKeyRange(startWeekKey, endWeekKey) {
+  const startDate = new Date(`${startWeekKey}T00:00:00`)
+  const endDate = new Date(`${endWeekKey}T00:00:00`)
+  const direction = startDate <= endDate ? 1 : -1
+  const weekKeys = []
+  const cursor = new Date(startDate)
+
+  while (direction > 0 ? cursor <= endDate : cursor >= endDate) {
+    weekKeys.push(formatWeekKey(cursor))
+    cursor.setDate(cursor.getDate() + 7 * direction)
+  }
+
+  return weekKeys
 }
 
 function getSavedBusiness() {
@@ -182,6 +193,7 @@ function App() {
   const [count, setCount] = useState(0)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modalMode, setModalMode] = useState('signup')
+  const [editingEmployeeName, setEditingEmployeeName] = useState('')
   const [isLoggedIn, setIsLoggedIn] = useState(() => hasSavedData())
   const [employee, setEmployee] = useState({
     businessName: '',
@@ -195,6 +207,7 @@ function App() {
   const [maximumStaff, setMaximumStaff] = useState(() => getSavedMaximumStaff())
   const [rollForwardDays, setRollForwardDays] = useState(() => getSavedRollForwardDays())
   const [selectedWeekKey, setSelectedWeekKey] = useState(() => getSavedSelectedWeek())
+  const [isResetWeekPressed, setIsResetWeekPressed] = useState(false)
   const [activeView, setActiveView] = useState('dashboard')
   const weekOptions = buildWeekOptions(new Date())
   const staffOptions = Array.from({ length: 20 }, (_, index) => index + 1)
@@ -210,7 +223,24 @@ function App() {
   }
 
   const openEmployeeModal = () => {
+    setEditingEmployeeName('')
     setModalMode('employee')
+    setEmployee((current) => ({ ...current, name: '', startTime: current.startTime || '09:00', endTime: current.endTime || '17:00' }))
+    setIsModalOpen(true)
+  }
+
+  const openEditEmployeeModal = (employeeName) => {
+    const selectedEmployee = getSavedEmployees().find((person) => person.name === employeeName)
+
+    setEditingEmployeeName(employeeName)
+    setModalMode('edit-employee')
+    setEmployee({
+      businessName: '',
+      email: '',
+      name: selectedEmployee?.name || employeeName,
+      startTime: selectedEmployee?.startTime || '09:00',
+      endTime: selectedEmployee?.endTime || '17:00',
+    })
     setIsModalOpen(true)
   }
 
@@ -242,6 +272,33 @@ function App() {
       saveEmployeeRecord(employeeRecord)
       setSavedEmployees(getSavedEmployees())
       setIsModalOpen(false)
+      setEditingEmployeeName('')
+      setEmployee({ businessName: '', email: '', name: '', startTime: '09:00', endTime: '17:00' })
+      return
+    }
+
+    if (modalMode === 'edit-employee') {
+      const employeeName = employee.name.trim()
+
+      if (!employeeName) {
+        return
+      }
+
+      const updatedEmployees = getSavedEmployees().map((person) => {
+        if (person.name !== editingEmployeeName) {
+          return person
+        }
+
+        return {
+          ...person,
+          name: employeeName,
+        }
+      })
+
+      localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+      setSavedEmployees(updatedEmployees)
+      setIsModalOpen(false)
+      setEditingEmployeeName('')
       setEmployee({ businessName: '', email: '', name: '', startTime: '09:00', endTime: '17:00' })
       return
     }
@@ -260,9 +317,19 @@ function App() {
 
   const getEmployeeDaysOffForWeek = (person, weekKey = selectedWeekKey) => {
     const weekSchedule = person.daysOffByWeek || {}
+    const weekMeta = person.daysOffByWeekMeta || {}
     const explicitDaysForWeek = weekSchedule[weekKey]
 
     if (Array.isArray(explicitDaysForWeek)) {
+      if (weekMeta[weekKey] === 'generated') {
+        const previousWeekKey = getPreviousWeekKey(weekKey)
+        const previousWeekDaysOff = Array.isArray(weekSchedule[previousWeekKey])
+          ? weekSchedule[previousWeekKey]
+          : []
+
+        return previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
+      }
+
       return explicitDaysForWeek
     }
 
@@ -283,37 +350,92 @@ function App() {
     return previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
   }
 
-  const hydrateWeekFromPrevious = (employees, weekKey = selectedWeekKey) => {
-    const generatedWeekKeys = []
-    const cursorDate = new Date(`${weekKey}T00:00:00`)
+  const hasStoredWeekData = (person, weekKey) => {
+    const weekDaysOff = person.daysOffByWeek?.[weekKey]
+    const weekShiftTimes = person.shiftTimesByWeek?.[weekKey]
 
-    for (let index = 0; index < 53; index += 1) {
-      generatedWeekKeys.push(formatWeekKey(cursorDate))
-      cursorDate.setDate(cursorDate.getDate() - 7)
+    if (Array.isArray(weekDaysOff) && weekDaysOff.length > 0) {
+      return true
     }
 
-    generatedWeekKeys.reverse()
+    if (weekShiftTimes && typeof weekShiftTimes === 'object' && Object.keys(weekShiftTimes).length > 0) {
+      return true
+    }
+
+    return false
+  }
+
+  const hydrateWeekFromPrevious = (
+    employees,
+    weekKey = selectedWeekKey,
+    forceRegenerate = false,
+    activeRollForwardDays = rollForwardDays,
+  ) => {
+    const allKnownWeekKeys = new Set()
+
+    employees.forEach((person) => {
+      Object.keys(person.daysOffByWeek || {}).forEach((storedWeekKey) => allKnownWeekKeys.add(storedWeekKey))
+      Object.keys(person.shiftTimesByWeek || {}).forEach((storedWeekKey) => allKnownWeekKeys.add(storedWeekKey))
+    })
+
+    const knownWeekKeys = [...allKnownWeekKeys]
+    const earliestKnownWeekKey = knownWeekKeys.length
+      ? knownWeekKeys.reduce((earliest, candidate) =>
+          new Date(`${candidate}T00:00:00`) < new Date(`${earliest}T00:00:00`) ? candidate : earliest,
+          knownWeekKeys[0],
+        )
+      : weekKey
+
+    const generatedWeekKeys = knownWeekKeys.length
+      ? [...new Set([...knownWeekKeys, ...getWeekKeyRange(earliestKnownWeekKey, weekKey)])]
+      : getWeekKeyRange(weekKey, weekKey)
 
     const updatedEmployees = employees.map((person) => {
       const weekSchedule = { ...(person.daysOffByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
+      const shiftSchedule = { ...(person.shiftTimesByWeek || {}) }
 
       for (const currentWeekKey of generatedWeekKeys) {
-        if (Array.isArray(weekSchedule[currentWeekKey])) {
-          continue
-        }
-
         const previousWeekKey = getPreviousWeekKey(currentWeekKey)
         const previousWeekDaysOff = Array.isArray(weekSchedule[previousWeekKey])
           ? weekSchedule[previousWeekKey]
           : []
+        const hasStoredDataForWeek = hasStoredWeekData(person, currentWeekKey)
+        const shouldRegenerate = forceRegenerate && weekMeta[currentWeekKey] !== 'manual'
 
-        const generatedDaysOff = previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
-        weekSchedule[currentWeekKey] = generatedDaysOff
+        if (!hasStoredDataForWeek && (shouldRegenerate || !weekMeta[currentWeekKey])) {
+          const generatedDaysOff = previousWeekDaysOff.map((day) =>
+            shiftDayForward(day, activeRollForwardDays),
+          )
+          weekSchedule[currentWeekKey] = generatedDaysOff
+          weekMeta[currentWeekKey] = 'generated'
+        }
+
+        if (!shiftSchedule[currentWeekKey] || typeof shiftSchedule[currentWeekKey] !== 'object') {
+          const previousWeekShiftTimes = shiftSchedule[previousWeekKey] || {}
+          const standardShift = {
+            startTime: person.startTime || '09:00',
+            endTime: person.endTime || '17:00',
+          }
+
+          shiftSchedule[currentWeekKey] = WEEK_DAYS.reduce((dayMap, day) => {
+            const previousDayShift = previousWeekShiftTimes[day]
+
+            dayMap[day] = {
+              ...standardShift,
+              ...(previousDayShift && typeof previousDayShift === 'object' ? previousDayShift : {}),
+            }
+
+            return dayMap
+          }, {})
+        }
       }
 
       return {
         ...person,
         daysOffByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
+        shiftTimesByWeek: shiftSchedule,
         daysOff: Array.isArray(weekSchedule[weekKey]) ? weekSchedule[weekKey] : [],
       }
     })
@@ -328,16 +450,19 @@ function App() {
       }
 
       const weekSchedule = { ...(person.daysOffByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
       const currentDaysOff = getEmployeeDaysOffForWeek(person, selectedWeekKey)
       const nextDaysOff = currentDaysOff.includes(day)
         ? currentDaysOff.filter((item) => item !== day)
         : [...currentDaysOff, day]
 
       weekSchedule[selectedWeekKey] = nextDaysOff
+      weekMeta[selectedWeekKey] = 'manual'
 
       return {
         ...person,
         daysOffByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
         daysOff: nextDaysOff,
       }
     })
@@ -368,6 +493,61 @@ function App() {
 
     setRollForwardDays(validValue)
     localStorage.setItem(ROLL_FORWARD_DAYS_KEY, String(validValue))
+
+    const materializedEmployees = hydrateWeekFromPrevious(
+      getSavedEmployees(),
+      selectedWeekKey,
+      true,
+      validValue,
+    )
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(materializedEmployees, null, 2))
+    setSavedEmployees(materializedEmployees)
+  }
+
+  const handleResetSelectedWeekFromPrevious = () => {
+    setIsResetWeekPressed(true)
+    window.setTimeout(() => setIsResetWeekPressed(false), 120)
+
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      const weekSchedule = { ...(person.daysOffByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
+      const shiftSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const previousWeekKey = getPreviousWeekKey(selectedWeekKey)
+      const previousWeekDaysOff = Array.isArray(weekSchedule[previousWeekKey])
+        ? weekSchedule[previousWeekKey]
+        : []
+      const regeneratedDaysOff = previousWeekDaysOff.map((day) => shiftDayForward(day, rollForwardDays))
+      const standardShift = {
+        startTime: person.startTime || '09:00',
+        endTime: person.endTime || '17:00',
+      }
+      const previousWeekShifts = shiftSchedule[previousWeekKey] || {}
+
+      shiftSchedule[selectedWeekKey] = WEEK_DAYS.reduce((dayMap, day) => {
+        const previousDayShift = previousWeekShifts[day]
+
+        dayMap[day] = {
+          ...standardShift,
+          ...(previousDayShift && typeof previousDayShift === 'object' ? previousDayShift : {}),
+        }
+
+        return dayMap
+      }, {})
+
+      weekSchedule[selectedWeekKey] = regeneratedDaysOff
+      weekMeta[selectedWeekKey] = 'generated'
+
+      return {
+        ...person,
+        daysOffByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
+        shiftTimesByWeek: shiftSchedule,
+        daysOff: regeneratedDaysOff,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
   }
 
   const handleResetEmployeeData = () => {
@@ -394,18 +574,29 @@ function App() {
   const getEmployeeShiftForDay = (person, day, weekKey = selectedWeekKey) => {
     const weekSchedule = person.shiftTimesByWeek || {}
     const dayShift = weekSchedule[weekKey]?.[day]
-
-    if (dayShift && typeof dayShift === 'object') {
-      return {
-        startTime: dayShift.startTime || person.startTime || '09:00',
-        endTime: dayShift.endTime || person.endTime || '17:00',
-      }
-    }
-
-    return {
+    const standardShift = {
       startTime: person.startTime || '09:00',
       endTime: person.endTime || '17:00',
     }
+
+    if (dayShift && typeof dayShift === 'object') {
+      return {
+        ...standardShift,
+        ...dayShift,
+      }
+    }
+
+    const previousWeekKey = getPreviousWeekKey(weekKey)
+    const previousWeekShift = weekSchedule[previousWeekKey]?.[day]
+
+    if (previousWeekShift && typeof previousWeekShift === 'object') {
+      return {
+        ...standardShift,
+        ...previousWeekShift,
+      }
+    }
+
+    return standardShift
   }
 
   const handleEmployeeShiftChange = (employeeName, day, field, value) => {
@@ -415,6 +606,7 @@ function App() {
       }
 
       const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
       const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
 
       currentWeekTimes[day] = {
@@ -423,10 +615,12 @@ function App() {
       }
 
       weekSchedule[selectedWeekKey] = currentWeekTimes
+      weekMeta[selectedWeekKey] = 'manual'
 
       return {
         ...person,
         shiftTimesByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
       }
     })
 
@@ -444,6 +638,7 @@ function App() {
       }
 
       const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
       const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
       const currentShift = currentWeekTimes[day] || {}
       const startTime = currentShift.startTime || person.startTime || '09:00'
@@ -456,10 +651,12 @@ function App() {
       }
 
       weekSchedule[selectedWeekKey] = currentWeekTimes
+      weekMeta[selectedWeekKey] = 'manual'
 
       return {
         ...person,
         shiftTimesByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
       }
     })
 
@@ -474,55 +671,38 @@ function App() {
       }
 
       const weekSchedule = { ...(person.shiftTimesByWeek || {}) }
+      const weekMeta = { ...(person.daysOffByWeekMeta || {}) }
       const currentWeekTimes = { ...(weekSchedule[selectedWeekKey] || {}) }
       const mondayShift = currentWeekTimes.Mon || {
         startTime: person.startTime || '09:00',
         endTime: person.endTime || '17:00',
       }
+      const mondayStartTime = mondayShift.startTime || person.startTime || '09:00'
+      const mondayEndTime = mondayShift.endTime || person.endTime || '17:00'
+      const mondayHours = getShiftHours(mondayStartTime, mondayEndTime)
 
       WEEK_DAYS.forEach((day) => {
+        const nextEndTime = getEndTimeFromHours(mondayStartTime, mondayHours)
+
         currentWeekTimes[day] = {
           ...(currentWeekTimes[day] || {}),
-          startTime: mondayShift.startTime,
-          endTime: mondayShift.endTime,
+          startTime: mondayStartTime,
+          endTime: nextEndTime,
         }
       })
 
       weekSchedule[selectedWeekKey] = currentWeekTimes
+      weekMeta[selectedWeekKey] = 'manual'
 
       return {
         ...person,
         shiftTimesByWeek: weekSchedule,
+        daysOffByWeekMeta: weekMeta,
       }
     })
 
     localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
     setSavedEmployees(updatedEmployees)
-  }
-
-  const getMinutesFromTime = (timeValue) => {
-    if (!timeValue || typeof timeValue !== 'string') {
-      return 0
-    }
-
-    const [hours, minutes] = timeValue.split(':').map((value) => Number(value))
-
-    if (Number.isNaN(hours) || Number.isNaN(minutes)) {
-      return 0
-    }
-
-    return hours * 60 + minutes
-  }
-
-  const getShiftHours = (startTime, endTime) => {
-    const startMinutes = getMinutesFromTime(startTime)
-    const endMinutes = getMinutesFromTime(endTime)
-
-    if (endMinutes <= startMinutes) {
-      return 0
-    }
-
-    return (endMinutes - startMinutes) / 60
   }
 
   const getTimeFromMinutes = (totalMinutes) => {
@@ -541,7 +721,10 @@ function App() {
     }
 
     const cappedHours = Math.min(rawHours, 12)
-    const roundedMinutes = Math.round((getMinutesFromTime(startTime) + cappedHours * 60) / 30) * 30
+    const breakMinutes = cappedHours > 0 ? 30 : 0
+    const roundedMinutes = Math.round(
+      (getMinutesFromTime(startTime) + (cappedHours + breakMinutes / 60) * 60) / 30,
+    ) * 30
     return getTimeFromMinutes(roundedMinutes)
   }
 
@@ -602,6 +785,31 @@ function App() {
         ...person,
         maxHoursByWeek,
         maxHours: normalizedValue,
+      }
+    })
+
+    localStorage.setItem(EMPLOYEES_STORAGE_KEY, JSON.stringify(updatedEmployees, null, 2))
+    setSavedEmployees(updatedEmployees)
+  }
+
+  const handleSaveEmployeeAsStandard = (employeeName) => {
+    const updatedEmployees = getSavedEmployees().map((person) => {
+      if (person.name !== employeeName) {
+        return person
+      }
+
+      const currentWeekSchedule = person.shiftTimesByWeek?.[selectedWeekKey] || {}
+      const preferredShift = WEEK_DAYS.map((day) => currentWeekSchedule[day]).find((dayShift) => {
+        return dayShift && typeof dayShift === 'object'
+      }) || {
+        startTime: person.startTime || '09:00',
+        endTime: person.endTime || '17:00',
+      }
+
+      return {
+        ...person,
+        startTime: preferredShift.startTime || person.startTime || '09:00',
+        endTime: preferredShift.endTime || person.endTime || '17:00',
       }
     })
 
@@ -736,12 +944,24 @@ function App() {
 
                     const hours = getShiftHours(shift.startTime, shift.endTime)
 
+                    const shiftBarStyle = getShiftBarStyle(shift.startTime, shift.endTime)
+
                     return (
                       <td key={`${person.name}-${day}`} className="print-shift-cell">
                         <div className="print-shift-content">
                           <strong>{shift.startTime}</strong>
                           <span>to {shift.endTime}</span>
                           <span>{hours.toFixed(1)}h</span>
+                        </div>
+
+                        <div className="print-time-scale" aria-label={`${person.name} working hours on ${day}`}>
+                          <div className="print-time-track" aria-hidden="true">
+                            <div className="print-time-fill" style={shiftBarStyle} />
+                          </div>
+                          <div className="print-time-labels" aria-hidden="true">
+                            <span>9a</span>
+                            <span>6p</span>
+                          </div>
                         </div>
                       </td>
                     )
@@ -832,6 +1052,13 @@ function App() {
                   ))}
                 </select>
               </label>
+              <button
+                type="button"
+                className={`reset-week-button ${isResetWeekPressed ? 'is-pressed' : ''}`}
+                onClick={handleResetSelectedWeekFromPrevious}
+              >
+                Reset week
+              </button>
             </div>
           </div>
 
@@ -886,6 +1113,8 @@ function App() {
                     getEmployeeHoursStatus={getEmployeeHoursStatus}
                     handleEmployeeMaxHoursChange={handleEmployeeMaxHoursChange}
                     handleDeleteEmployee={handleDeleteEmployee}
+                    handleEditEmployee={openEditEmployeeModal}
+                    handleSaveEmployeeAsStandard={handleSaveEmployeeAsStandard}
                     getShiftHours={getShiftHours}
                   />
                 ))}
@@ -894,16 +1123,16 @@ function App() {
           </div>
         </section>
 
-        {isModalOpen && modalMode === 'employee' && (
+        {(isModalOpen && (modalMode === 'employee' || modalMode === 'edit-employee')) && (
           <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>
             <div className="modal" onClick={(event) => event.stopPropagation()}>
               <div className="modal-header">
-                <h2>Add employee</h2>
+                <h2>{modalMode === 'edit-employee' ? 'Edit employee' : 'Add employee'}</h2>
                 <button
                   type="button"
                   className="close-button"
                   onClick={() => setIsModalOpen(false)}
-                  aria-label="Close add employee form"
+                  aria-label={modalMode === 'edit-employee' ? 'Close edit employee form' : 'Close add employee form'}
                 >
                   ×
                 </button>
@@ -922,33 +1151,35 @@ function App() {
                   />
                 </label>
 
-                <div className="time-form-row">
-                  <label>
-                    Start time
-                    <input
-                      type="time"
-                      name="startTime"
-                      value={employee.startTime}
-                      onChange={handleChange}
-                    />
-                  </label>
-                  <label>
-                    End time
-                    <input
-                      type="time"
-                      name="endTime"
-                      value={employee.endTime}
-                      onChange={handleChange}
-                    />
-                  </label>
-                </div>
+                {modalMode === 'employee' && (
+                  <div className="time-form-row">
+                    <label>
+                      Start time
+                      <input
+                        type="time"
+                        name="startTime"
+                        value={employee.startTime}
+                        onChange={handleChange}
+                      />
+                    </label>
+                    <label>
+                      End time
+                      <input
+                        type="time"
+                        name="endTime"
+                        value={employee.endTime}
+                        onChange={handleChange}
+                      />
+                    </label>
+                  </div>
+                )}
 
                 <div className="modal-actions">
                   <button type="button" className="secondary" onClick={() => setIsModalOpen(false)}>
                     Cancel
                   </button>
                   <button type="submit" className="primary">
-                    Save employee
+                    {modalMode === 'edit-employee' ? 'Save changes' : 'Save employee'}
                   </button>
                 </div>
               </form>

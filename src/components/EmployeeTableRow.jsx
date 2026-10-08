@@ -13,6 +13,8 @@ export default function EmployeeTableRow({
   getEmployeeHoursStatus,
   handleEmployeeMaxHoursChange,
   handleDeleteEmployee,
+  handleEditEmployee,
+  handleSaveEmployeeAsStandard,
   getShiftHours,
 }) {
   return (
@@ -30,6 +32,22 @@ export default function EmployeeTableRow({
               aria-label={`Delete ${person.name}`}
             >
               Delete
+            </button>
+            <button
+              type="button"
+              className="edit-employee-button"
+              onClick={() => handleEditEmployee(person.name)}
+              aria-label={`Edit ${person.name}`}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="standard-times-button"
+              onClick={() => handleSaveEmployeeAsStandard(person.name)}
+              aria-label={`Save standard times for ${person.name}`}
+            >
+              Save as standard
             </button>
           </div>
           <span
