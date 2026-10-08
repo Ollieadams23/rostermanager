@@ -207,6 +207,7 @@ function App() {
   const [maximumStaff, setMaximumStaff] = useState(() => getSavedMaximumStaff())
   const [rollForwardDays, setRollForwardDays] = useState(() => getSavedRollForwardDays())
   const [selectedWeekKey, setSelectedWeekKey] = useState(() => getSavedSelectedWeek())
+  const [selectedStaffingDay, setSelectedStaffingDay] = useState(null)
   const [isResetWeekPressed, setIsResetWeekPressed] = useState(false)
   const [activeView, setActiveView] = useState('dashboard')
   const weekOptions = buildWeekOptions(new Date())
@@ -1073,6 +1074,7 @@ function App() {
                   availableEmployees={availableEmployees}
                   minimumStaff={minimumStaff}
                   maximumStaff={maximumStaff}
+                  onOpenDetails={setSelectedStaffingDay}
                 />
               )
             })}
@@ -1122,6 +1124,62 @@ function App() {
             </table>
           </div>
         </section>
+
+        {selectedStaffingDay && (
+          <div className="modal-backdrop" onClick={() => setSelectedStaffingDay(null)}>
+            <div className="modal staffing-day-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="modal-header">
+                <h2>{selectedStaffingDay} shifts</h2>
+                <button
+                  type="button"
+                  className="close-button"
+                  onClick={() => setSelectedStaffingDay(null)}
+                  aria-label={`Close ${selectedStaffingDay} staffing details`}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="staffing-day-details">
+                {savedEmployees.filter(
+                  (person) => !getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(selectedStaffingDay),
+                ).length === 0 ? (
+                  <p className="roster-empty">No employees working on {selectedStaffingDay}</p>
+                ) : (
+                  savedEmployees
+                    .filter(
+                      (person) => !getEmployeeDaysOffForWeek(person, selectedWeekKey).includes(selectedStaffingDay),
+                    )
+                    .map((person) => {
+                      const shift = getEmployeeShiftForDay(person, selectedStaffingDay, selectedWeekKey)
+                      const hours = getShiftHours(shift.startTime, shift.endTime)
+                      const shiftBarStyle = getShiftBarStyle(shift.startTime, shift.endTime)
+
+                      return (
+                        <div key={`${person.name}-${selectedStaffingDay}`} className="staffing-shift-row">
+                          <div className="staffing-shift-header">
+                            <strong>{person.name}</strong>
+                            <span>
+                              {shift.startTime} - {shift.endTime} ({hours.toFixed(1)}h)
+                            </span>
+                          </div>
+                          <div className="print-time-scale" aria-label={`${person.name} working hours on ${selectedStaffingDay}`}>
+                            <div className="print-time-track" aria-hidden="true">
+                              <div className="print-time-fill" style={shiftBarStyle} />
+                            </div>
+                            <div className="print-time-labels" aria-hidden="true">
+                              <span>9a</span>
+                              <span>6p</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {(isModalOpen && (modalMode === 'employee' || modalMode === 'edit-employee')) && (
           <div className="modal-backdrop" onClick={() => setIsModalOpen(false)}>

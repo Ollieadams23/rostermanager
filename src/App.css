@@ -272,6 +272,15 @@
   background: #f9fafb;
   border-radius: 12px;
   padding: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.roster-day-card:hover,
+.roster-day-card:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(17, 24, 39, 0.08);
+  outline: none;
 }
 
 .roster-day-card h3 {
@@ -752,6 +761,45 @@
   margin-top: 4px;
   font-size: 10px;
   color: #6b7280;
+}
+
+.staffing-day-modal {
+  width: min(620px, calc(100vw - 24px));
+  max-height: min(80vh, 760px);
+  overflow-y: auto;
+}
+
+.staffing-day-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.staffing-shift-row {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.staffing-shift-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.staffing-shift-header strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.staffing-shift-header span {
+  color: #4b5563;
+  white-space: nowrap;
 }
 
 @media (max-width: 640px) {

@@ -46,6 +46,7 @@ export default function EmployeeTableRow({
               className="standard-times-button"
               onClick={() => handleSaveEmployeeAsStandard(person.name)}
               aria-label={`Save standard times for ${person.name}`}
+              title="Save the current week's hours as this employee's default template for future weeks."
             >
               Save as standard
             </button>

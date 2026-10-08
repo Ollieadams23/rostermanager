@@ -1,4 +1,10 @@
-export default function RosterDayCard({ day, availableEmployees, minimumStaff, maximumStaff }) {
+export default function RosterDayCard({
+  day,
+  availableEmployees,
+  minimumStaff,
+  maximumStaff,
+  onOpenDetails,
+}) {
   const staffingCount = availableEmployees.length
   const isUnderMinimum = staffingCount < minimumStaff
   const isOverMaximum = staffingCount > maximumStaff
@@ -8,8 +14,23 @@ export default function RosterDayCard({ day, availableEmployees, minimumStaff, m
       ? 'roster-understaffed'
       : 'roster-okay'
 
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      onOpenDetails?.(day)
+    }
+  }
+
   return (
-    <div key={day} className={`roster-day-card ${dayStatusClass}`}>
+    <div
+      key={day}
+      className={`roster-day-card ${dayStatusClass}`}
+      onClick={() => onOpenDetails?.(day)}
+      onKeyDown={handleKeyDown}
+      role="button"
+      tabIndex={0}
+      aria-label={`View staffing details for ${day}`}
+    >
       <h3>{day}</h3>
       <p className="roster-available-count">
         {staffingCount} / {minimumStaff} min • {maximumStaff} max
